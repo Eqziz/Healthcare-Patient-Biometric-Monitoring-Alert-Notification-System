@@ -1,127 +1,97 @@
-@startuml
-skinparam classAttributeIconSize 0
-skinparam monochrome true
-skinparam packageStyle rectangle
+```mermaid
+classDiagram
+    direction TB
 
-package "Domain Layer" {
-    enum AlertSeverity {
-        LOW
-        MODERATE
-        CRITICAL
+    %% --- Bridge Abstraction Hierarchy ---
+    class VitalAlert {
+        <>
+        #BiometricAlertChannel channel
+        +VitalAlert(channel: BiometricAlertChannel)
+        +setChannel(channel: BiometricAlertChannel) void
+        +getChannel() BiometricAlertChannel
+        +dispatch(payload: VitalsPayload, endpoint: String)* DeliveryReport
     }
 
-    class VitalsPayload <> {
-        +patientId: String
-        +metricType: String
-        +observedValue: double
-        +thresholdValue: double
-        +severity: AlertSeverity
-        +timestamp: Instant
+    class CriticalIcuEmergencyAlert {
+        +CriticalIcuEmergencyAlert(channel: BiometricAlertChannel)
+        +dispatch(payload: VitalsPayload, endpoint: String) DeliveryReport
     }
 
-    class DeliveryReport <> {
-        +trackingId: String
-        +channelName: String
-        +deliveredAt: Instant
-        +acknowledged: boolean
+    class RoutineTelemetryAuditAlert {
+        -int retryAttempts
+        +RoutineTelemetryAuditAlert(channel: BiometricAlertChannel, retryAttempts: int)
+        +dispatch(payload: VitalsPayload, endpoint: String) DeliveryReport
     }
 
-    class ChannelDeliveryException {
-        -channelName: String
-        -failureCode: int
-        +getChannelName(): String
-        +getFailureCode(): int
-    }
-}
+    VitalAlert <|-- CriticalIcuEmergencyAlert : extends
+    VitalAlert <|-- RoutineTelemetryAuditAlert : extends
 
-package "Implementor Hierarchy (Bridge Side B)" {
-    interface BiometricAlertChannel <> {
-        +{abstract} getChannelCode(): String
-        +{abstract} supportsSeverity(severity: AlertSeverity): boolean
-        +{abstract} transmit(payload: VitalsPayload, destinationEndpoint: String): DeliveryReport
+    %% --- Bridge Implementor Hierarchy ---
+    class BiometricAlertChannel {
+        <>
+        +getChannelCode()* String
+        +supportsSeverity(severity: AlertSeverity)* boolean
+        +transmit(payload: VitalsPayload, destinationEndpoint: String)* DeliveryReport
     }
 
-    class HospitalRestPushChannel implements BiometricAlertChannel {
-        +getChannelCode(): String
-        +supportsSeverity(severity: AlertSeverity): boolean
-        +transmit(payload: VitalsPayload, destinationEndpoint: String): DeliveryReport
+    class HospitalRestPushChannel {
+        +getChannelCode() String
+        +supportsSeverity(severity: AlertSeverity) boolean
+        +transmit(payload: VitalsPayload, destinationEndpoint: String) DeliveryReport
     }
 
-    class IcuPagerRadioChannel implements BiometricAlertChannel {
-        +getChannelCode(): String
-        +supportsSeverity(severity: AlertSeverity): boolean
-        +transmit(payload: VitalsPayload, destinationEndpoint: String): DeliveryReport
+    class IcuPagerRadioChannel {
+        +getChannelCode() String
+        +supportsSeverity(severity: AlertSeverity) boolean
+        +transmit(payload: VitalsPayload, destinationEndpoint: String) DeliveryReport
     }
 
-    class LegacyHl7GatewayAdapter implements BiometricAlertChannel {
-        -legacyGateway: LegacyHl7TcpGateway
-        -defaultTimeoutMs: int
-        -facilityId: String
+    class LegacyHl7GatewayAdapter {
+        -LegacyHl7TcpGateway legacyGateway
+        -int defaultTimeoutMs
+        -String facilityId
         +LegacyHl7GatewayAdapter(legacyGateway: LegacyHl7TcpGateway, defaultTimeoutMs: int, facilityId: String)
-        +getChannelCode(): String
-        +supportsSeverity(severity: AlertSeverity): boolean
-        +transmit(payload: VitalsPayload, destinationEndpoint: String): DeliveryReport
-        -convertToHl7Frame(payload: VitalsPayload, targetEndpoint: String): byte[]
-        -translateStatusCode(status: Hl7TransmissionStatus): ChannelDeliveryException
+        +getChannelCode() String
+        +supportsSeverity(severity: AlertSeverity) boolean
+        +transmit(payload: VitalsPayload, destinationEndpoint: String) DeliveryReport
+        -convertToHl7Frame(payload: VitalsPayload, targetEndpoint: String) byte[]
+        -translateStatusCode(status: Hl7TransmissionStatus) ChannelDeliveryException
     }
-}
 
-package "Third-Party Subsystem (Adaptee)" {
+    BiometricAlertChannel <|.. HospitalRestPushChannel : implements
+    BiometricAlertChannel <|.. IcuPagerRadioChannel : implements
+    BiometricAlertChannel <|.. LegacyHl7GatewayAdapter : implements
+
+    %% --- Bridge Association ---
+    VitalAlert o--> BiometricAlertChannel : "Bridge (channel)"
+
+    %% --- Incompatible Legacy Adaptee ---
     class LegacyHl7TcpGateway {
-        -ipAddress: String
-        -port: int
-        +sendRawHl7Frame(timeoutMillis: int, mllpFrame: byte[], facilityId: String): Hl7TransmissionStatus
+        -String ipAddress
+        -int port
+        +sendRawHl7Frame(timeoutMillis: int, mllpFrame: byte[], facilityId: String) Hl7TransmissionStatus
+        +getIpAddress() String
+        +getPort() int
     }
 
     class Hl7TransmissionStatus {
-        +{static} STATUS_OK: int
-        +{static} ERR_BUFFER_OVERFLOW: int
-        +{static} ERR_CHECKSUM_MISMATCH: int
-        +{static} ERR_ACK_REJECTED: int
-        -statusCode: int
-        -diagnosticBlob: String
-        +isSuccess(): boolean
+        +STATUS_OK: int\(+ERR_BUFFER_OVERFLOW: int\)
+        +ERR_CHECKSUM_MISMATCH: int\(+ERR_ACK_REJECTED: int\)
+        -int statusCode
+        -String diagnosticBlob
+        +getStatusCode() int
+        +getDiagnosticBlob() String
+        +isSuccess() boolean
     }
 
-    class LegacySocketTimeoutException <> {
-    }
-
-    LegacyHl7GatewayAdapter o--> LegacyHl7TcpGateway : wraps
+    LegacyHl7GatewayAdapter o--> LegacyHl7TcpGateway : "wraps / adapts"
     LegacyHl7TcpGateway ..> Hl7TransmissionStatus : returns
-    LegacyHl7TcpGateway ..> LegacySocketTimeoutException : throws
-}
 
-package "Abstraction Hierarchy (Bridge Side A)" {
-    abstract class VitalAlert <> {
-        #channel: BiometricAlertChannel
-        +VitalAlert(channel: BiometricAlertChannel)
-        +setChannel(channel: BiometricAlertChannel): void
-        +getChannel(): BiometricAlertChannel
-        +{abstract} dispatch(payload: VitalsPayload, endpoint: String): DeliveryReport
-    }
-
-    class CriticalIcuEmergencyAlert extends VitalAlert {
-        +CriticalIcuEmergencyAlert(channel: BiometricAlertChannel)
-        +dispatch(payload: VitalsPayload, endpoint: String): DeliveryReport
-    }
-
-    class RoutineTelemetryAuditAlert extends VitalAlert {
-        -retryAttempts: int
-        +RoutineTelemetryAuditAlert(channel: BiometricAlertChannel, retryAttempts: int)
-        +dispatch(payload: VitalsPayload, endpoint: String): DeliveryReport
-    }
-
-    VitalAlert o--> BiometricAlertChannel : bridge reference
-}
-
-package "Dynamic Implementor Selection" {
+    %% --- Dynamic Selector ---
     class DynamicChannelRegistry {
-        -channels: List
-        +registerChannel(channel: BiometricAlertChannel): void
-        +resolveChannel(severity: AlertSeverity, preferredChannelCode: String): BiometricAlertChannel
+        -List~BiometricAlertChannel~ channels
+        +registerChannel(channel: BiometricAlertChannel) void
+        +resolveChannel(severity: AlertSeverity, preferredChannelCode: String) BiometricAlertChannel
     }
 
-    DynamicChannelRegistry o--> BiometricAlertChannel
-}
-
-@enduml
+    DynamicChannelRegistry o--> BiometricAlertChannel : manages
