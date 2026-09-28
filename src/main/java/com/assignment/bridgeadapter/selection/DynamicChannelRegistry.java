@@ -8,15 +8,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Dynamic Implementor Selection: Resolves the appropriate implementation at runtime
- * based on payload requirements, avoiding hardcoding in the client or Abstraction.
- */
 public class DynamicChannelRegistry {
 
-    private final List channels = new ArrayList<>();
+    private final List<BiometricAlertChannel> channels = new ArrayList<>();
 
-    public DynamicChannelRegistry(List initialChannels) {
+    public DynamicChannelRegistry(List<BiometricAlertChannel> initialChannels) {
         if (initialChannels != null) {
             this.channels.addAll(initialChannels);
         }
@@ -28,7 +24,7 @@ public class DynamicChannelRegistry {
 
     public BiometricAlertChannel resolveChannel(AlertSeverity severity, String preferredChannelCode) {
         if (preferredChannelCode != null && !preferredChannelCode.isBlank()) {
-            Optional match = channels.stream()
+            Optional<BiometricAlertChannel> match = channels.stream()
                 .filter(c -> c.getChannelCode().equalsIgnoreCase(preferredChannelCode))
                 .findFirst();
             if (match.isPresent()) {
@@ -42,7 +38,7 @@ public class DynamicChannelRegistry {
             .orElseThrow(() -> new IllegalStateException("No available delivery channel configured for severity: " + severity));
     }
 
-    public List getRegisteredChannels() {
+    public List<BiometricAlertChannel> getRegisteredChannels() {
         return Collections.unmodifiableList(channels);
     }
 }
